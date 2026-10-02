@@ -1,8 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const pool = require('../db');
 
 const router = express.Router();
+if(!process.env.JWT_SECRET){
+    throw new Error('JWT_SECRET is missing in .env');
+}
 
 router.post('/register', async (req, res) => {
   try {
@@ -37,6 +41,44 @@ router.post('/register', async (req, res) => {
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'email is already registered' });
     }
+    console.error(err);
+    res.status(500).json({ error: 'something went wrong' });
+  }
+});
+
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'email and password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    const [rows] = await pool.query(
+      'SELECT id, name, email, password_hash FROM users WHERE email = ?',
+      [cleanEmail]
+    );
+
+    const user = rows[0];
+    const passwordOk = user ? await bcrypt.compare(password, user.password_hash) : false;
+
+    if (!passwordOk) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
+    );
+
+    res.json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email },
+    });
+  } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'something went wrong' });
   }
