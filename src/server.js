@@ -5,6 +5,7 @@ const authRoutes = require('./routes/auth');
 const accountRoutes = require('./routes/accounts');
 const transactionRoutes = require('./routes/transactions');
 const categoryRoutes = require('./routes/categories');
+const transferRoutes = require('./routes/transfers');
 
 const app = express();
 app.use(express.json());
@@ -12,6 +13,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/transfers', transferRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
