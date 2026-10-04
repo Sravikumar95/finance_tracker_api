@@ -114,21 +114,75 @@ router.post('/', async (req, res) => {
   }
 });
 
+const TRANSACTION_TYPES = ['income', 'expense', 'transfer_in', 'transfer_out'];
+
 router.get('/', async (req, res) => {
   try {
-    const page = req.query.page === undefined ? 1 : Number(req.query.page);
-    const limit = req.query.limit === undefined ? 20 : Number(req.query.limit);
+    const q = req.query;
+    const conditions = ['a.user_id = ?'];
+    const params = [req.user.id];
+
+    if (q.accountId !== undefined) {
+      const id = Number(q.accountId);
+      if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({ error: 'accountId must be a positive whole number' });
+      }
+      conditions.push('t.account_id = ?');
+      params.push(id);
+    }
+
+    if (q.categoryId !== undefined) {
+      const id = Number(q.categoryId);
+      if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({ error: 'categoryId must be a positive whole number' });
+      }
+      conditions.push('t.category_id = ?');
+      params.push(id);
+    }
+
+    if (q.type !== undefined) {
+      if (!TRANSACTION_TYPES.includes(q.type)) {
+        return res.status(400).json({ error: `type must be one of: ${TRANSACTION_TYPES.join(', ')}` });
+      }
+      conditions.push('t.type = ?');
+      params.push(q.type);
+    }
+
+    if (q.from !== undefined) {
+      if (!isValidDate(q.from)) {
+        return res.status(400).json({ error: 'from must be a real date in YYYY-MM-DD format' });
+      }
+      conditions.push('t.txn_date >= ?');
+      params.push(q.from);
+    }
+
+    if (q.to !== undefined) {
+      if (!isValidDate(q.to)) {
+        return res.status(400).json({ error: 'to must be a real date in YYYY-MM-DD format' });
+      }
+      conditions.push('t.txn_date <= ?');
+      params.push(q.to);
+    }
+
+    if (q.from !== undefined && q.to !== undefined && q.from > q.to) {
+      return res.status(400).json({ error: 'from must not be after to' });
+    }
+
+    const page = q.page === undefined ? 1 : Number(q.page);
+    const limit = q.limit === undefined ? 20 : Number(q.limit);
     if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
       return res.status(400).json({ error: 'page must be 1 or more, and limit must be 1 to 100' });
     }
     const offset = (page - 1) * limit;
 
+    const where = conditions.join(' AND ');
+
     const [countRows] = await pool.query(
       `SELECT COUNT(*) AS total
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
-       WHERE a.user_id = ?`,
-      [req.user.id]
+       WHERE ${where}`,
+      params
     );
 
     const [rows] = await pool.query(
@@ -138,10 +192,10 @@ router.get('/', async (req, res) => {
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
        LEFT JOIN categories c ON c.id = t.category_id
-       WHERE a.user_id = ?
+       WHERE ${where}
        ORDER BY t.txn_date DESC, t.id DESC
        LIMIT ? OFFSET ?`,
-      [req.user.id, limit, offset]
+      [...params, limit, offset]
     );
 
     const total = countRows[0].total;
