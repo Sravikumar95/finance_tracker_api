@@ -7,6 +7,7 @@ const transactionRoutes = require('./routes/transactions');
 const categoryRoutes = require('./routes/categories');
 const transferRoutes = require('./routes/transfers');
 const analyticsRoutes = require('./routes/analytics');
+const budgetRoutes = require('./routes/budgets');
 
 const app = express();
 app.use(express.json());
@@ -16,6 +17,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/transfers', transferRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/budgets', budgetRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
