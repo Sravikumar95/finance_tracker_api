@@ -1,15 +1,25 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { rateLimit } = require('express-rate-limit');
 const pool = require('../db');
 const requireAuth = require('../middleware/auth');
 
 const router = express.Router();
-if(!process.env.JWT_SECRET){
-    throw new Error('JWT_SECRET is missing in .env');
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is missing in .env');
 }
 
-router.post('/register', async (req, res) => {
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // max 20 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
+});
+
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -47,7 +57,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -84,6 +94,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'something went wrong' });
   }
 });
+
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query(
