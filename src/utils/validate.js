@@ -4,6 +4,11 @@ function isValidDate(value) {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
+function isValidMonth(value) {
+  if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return false;
+  return true;
+}
+
 function parseAmount(value) {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
   const text = String(value).trim();
@@ -12,4 +17,4 @@ function parseAmount(value) {
   return `${whole}.${fraction.padEnd(2, '0')}`;
 }
 
-module.exports = { isValidDate, parseAmount };
+module.exports = { isValidDate, isValidMonth, parseAmount };
