@@ -97,6 +97,69 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/vs-actual', async (req, res) => {
+  try {
+    const q = req.query;
+    const conditions = ['b.user_id = ?'];
+    const params = [req.user.id];
+
+    if (q.month !== undefined) {
+      if (!isValidMonth(q.month)) {
+        return res.status(400).json({ error: 'month must be in YYYY-MM format (e.g. 2025-01)' });
+      }
+      conditions.push('b.budget_month = ?');
+      params.push(`${q.month}-01`);
+    }
+
+    if (q.categoryId !== undefined) {
+      const catId = Number(q.categoryId);
+      if (!Number.isInteger(catId) || catId < 1) {
+        return res.status(400).json({ error: 'categoryId must be a positive whole number' });
+      }
+      conditions.push('b.category_id = ?');
+      params.push(catId);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const sql = `
+      SELECT b.id AS budgetId,
+             b.category_id AS categoryId,
+             c.name AS categoryName,
+             DATE_FORMAT(b.budget_month, '%Y-%m') AS month,
+             b.amount_limit AS budgetLimit,
+             COALESCE(ROUND(SUM(t.amount), 2), '0.00') AS actualSpent,
+             ROUND(b.amount_limit - COALESCE(SUM(t.amount), 0), 2) AS remaining,
+             ROUND(100 * COALESCE(SUM(t.amount), 0) / b.amount_limit, 1) AS percentUsed,
+             CASE WHEN COALESCE(SUM(t.amount), 0) > b.amount_limit THEN 1 ELSE 0 END AS overBudget
+      FROM budgets b
+      JOIN categories c ON c.id = b.category_id
+      LEFT JOIN (
+        transactions t
+        JOIN accounts a ON a.id = t.account_id
+      ) ON t.category_id = b.category_id
+        AND a.user_id = b.user_id
+        AND t.type = 'expense'
+        AND t.txn_date >= b.budget_month
+        AND t.txn_date <= LAST_DAY(b.budget_month)
+      WHERE ${where}
+      GROUP BY b.id, b.category_id, c.name, b.budget_month, b.amount_limit
+      ORDER BY percentUsed DESC, c.name ASC
+    `;
+
+    const [rows] = await pool.query(sql, params);
+    const formatted = rows.map((r) => ({
+      ...r,
+      overBudget: Boolean(r.overBudget),
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'something went wrong' });
+  }
+});
+
 router.put('/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
