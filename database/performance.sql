@@ -36,3 +36,33 @@ CREATE INDEX idx_txn_date ON transactions (txn_date);
 
 -- After D, run ANALYZE TABLE, then A, B and C again, and compare.
 -- To repeat the experiment from scratch: DROP INDEX idx_txn_date ON transactions;  
+-- E. Fair comparison: same query, same session, warm runs.
+-- E1. No index: tell MySQL to ignore idx_txn_date so it must scan the table
+EXPLAIN ANALYZE
+SELECT COUNT(*) AS expense_transactions,
+       ROUND(SUM(amount), 2) AS total_spent
+FROM transactions IGNORE INDEX (idx_txn_date)
+WHERE type = 'expense'
+  AND txn_date >= '2026-09-01'
+  AND txn_date <  '2026-10-01';
+
+-- E2. With the date index
+EXPLAIN ANALYZE
+SELECT COUNT(*) AS expense_transactions,
+       ROUND(SUM(amount), 2) AS total_spent
+FROM transactions USE INDEX (idx_txn_date)
+WHERE type = 'expense'
+  AND txn_date >= '2026-09-01'
+  AND txn_date <  '2026-10-01';
+
+-- E3. Optional: a composite index (type, txn_date), tested and then dropped
+-- CREATE INDEX idx_txn_type_date ON transactions (type, txn_date);
+-- ...run E2 with USE INDEX (idx_txn_type_date)...
+-- DROP INDEX idx_txn_type_date ON transactions;
+
+-- Results (MySQL 8.0, ~55k transactions, September expense report, 2,081 rows):
+--   No index (full table scan, 54,688 rows read): ~47 ms
+--   idx_txn_date (txn_date):                      ~10 ms  (index size 1.52 MB)
+--   idx_txn_type_date (type, txn_date):           ~10.6 ms, no faster, so dropped
+-- Kept idx_txn_date: about 4-5x faster than a table scan on this data.
+
